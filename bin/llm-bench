@@ -1,0 +1,193 @@
+#!/usr/bin/env node
+
+/**
+ * LLM Benchmark CLI
+ * Command-line interface for running model benchmarks
+ */
+
+import { Command } from 'commander';
+import { runBenchmark, checkModelAvailability } from '../src/core/runner.js';
+import { MODELS, filterModels } from '../src/config/models.js';
+import { printHeader, printSummary, printAnalysis, printLoopEffectiveness } from '../src/reporters/console.js';
+
+const program = new Command();
+
+program
+  .name('llm-bench')
+  .description('LLM Model Benchmark Tool - Compare model performance on code generation tasks')
+  .version('1.0.0');
+
+/**
+ * Run benchmarks
+ */
+program
+  .command('run')
+  .description('Run benchmark tests against LLM models')
+  .option('-m, --models <models>', 'Comma-separated list of model IDs or patterns (e.g., gpt-4,o3)')
+  .option('-s, --suite <suite>', 'Test suite to run (navigation, forms, all)', 'all')
+  .option('-i, --iterations <n>', 'Max validation iterations per test', '3')
+  .option('-r, --reporter <type>', 'Output format (console, json)', 'console')
+  .option('-o, --output <file>', 'Output file for JSON reporter')
+  .action(async (options) => {
+    printHeader('LLM MODEL BENCHMARK');
+
+    // Select models
+    let models = MODELS;
+    if (options.models) {
+      const patterns = options.models.split(',');
+      models = patterns.flatMap((p) => filterModels(p.trim()));
+      if (models.length === 0) {
+        console.error('❌ No models matched the provided patterns');
+        process.exit(1);
+      }
+    }
+
+    console.log(`📋 Selected ${models.length} model(s): ${models.map((m) => m.name).join(', ')}\n`);
+
+    // Load test cases based on suite
+    const testCases = await loadTestSuite(options.suite);
+    if (testCases.length === 0) {
+      console.error('❌ No test cases found for suite:', options.suite);
+      process.exit(1);
+    }
+
+    console.log(`📝 Running ${testCases.length} test(s)\n`);
+
+    try {
+      const { results, available } = await runBenchmark({
+        models,
+        testCases,
+        maxIterations: parseInt(options.iterations, 10),
+      });
+
+      // Output results
+      if (options.reporter === 'json') {
+        const output = JSON.stringify({ results, timestamp: new Date().toISOString() }, null, 2);
+        if (options.output) {
+          const fs = await import('fs');
+          fs.writeFileSync(options.output, output);
+          console.log(`\n✅ Results saved to ${options.output}`);
+        } else {
+          console.log(output);
+        }
+      } else {
+        printSummary(results, available);
+        printAnalysis(results, available);
+        printLoopEffectiveness(results, available, testCases.length);
+      }
+    } catch (error) {
+      console.error('❌ Benchmark failed:', error.message);
+      process.exit(1);
+    }
+  });
+
+/**
+ * Check model availability
+ */
+program
+  .command('check')
+  .description('Check which models are available')
+  .option('-m, --models <models>', 'Comma-separated list of model IDs or patterns')
+  .action(async (options) => {
+    printHeader('MODEL AVAILABILITY CHECK');
+
+    let models = MODELS;
+    if (options.models) {
+      const patterns = options.models.split(',');
+      models = patterns.flatMap((p) => filterModels(p.trim()));
+    }
+
+    const { available, unavailable } = await checkModelAvailability(models);
+
+    console.log('\n📊 Summary:');
+    console.log(`   ✅ Available: ${available.length}`);
+    console.log(`   ❌ Unavailable: ${unavailable.length}`);
+
+    if (unavailable.length > 0) {
+      console.log('\n   Unavailable models:');
+      unavailable.forEach((u) => {
+        console.log(`     - ${u.model.name}: ${u.error}`);
+      });
+    }
+    console.log('');
+  });
+
+/**
+ * List available models
+ */
+program
+  .command('list')
+  .description('List all configured models')
+  .action(() => {
+    printHeader('AVAILABLE MODELS');
+
+    console.log('Model Name'.padEnd(20) + 'Model ID'.padEnd(25) + 'Type');
+    console.log('═'.repeat(60));
+
+    MODELS.forEach((model) => {
+      let type = 'Standard';
+      if (model.id.startsWith('o1') || model.id.startsWith('o3') || model.id.startsWith('o4')) {
+        type = 'Reasoning';
+      } else if (model.id.includes('gpt-5')) {
+        type = 'GPT-5';
+      } else if (model.id.includes('codex')) {
+        type = 'Codex';
+      }
+      console.log(model.name.padEnd(20) + model.id.padEnd(25) + type);
+    });
+    console.log('');
+  });
+
+/**
+ * Load test suite
+ */
+async function loadTestSuite(suite) {
+  // Default navigation test cases
+  const navigationTests = [
+    {
+      name: 'Basic Navigation',
+      prompt: `Create a React navigation component with:
+- A horizontal nav bar with logo on left
+- 3 navigation links: Home, About, Contact
+- Mobile hamburger menu
+- Use Tailwind CSS classes
+
+IMPORTANT: Use buttons with onClick handlers, NOT anchor tags with href="#".
+Return ONLY the JSX code, no explanations.`,
+    },
+    {
+      name: 'Tab Navigation',
+      prompt: `Create a React tab navigation component with:
+- 4 tabs: Overview, Features, Pricing, FAQ
+- Active tab indicator (highlighted/underlined)
+- Content area that changes based on selected tab
+- Use Tailwind CSS
+
+IMPORTANT: Use buttons with onClick handlers for tabs, NOT anchor tags.
+Return ONLY the JSX code, no explanations.`,
+    },
+    {
+      name: 'Sidebar Navigation',
+      prompt: `Create a React sidebar navigation component with:
+- Collapsible sidebar (can be toggled)
+- 5 menu items with icons (use emoji as icons)
+- Nested submenu for one item
+- Active state styling
+- Use Tailwind CSS
+
+IMPORTANT: Use buttons with onClick handlers, NOT anchor tags with href="#".
+Return ONLY the JSX code, no explanations.`,
+    },
+  ];
+
+  switch (suite) {
+    case 'navigation':
+      return navigationTests;
+    case 'all':
+    default:
+      return navigationTests;
+  }
+}
+
+// Parse arguments
+program.parse();

@@ -1,0 +1,39 @@
+{
+  "name": "llm-benchmark",
+  "version": "1.0.0",
+  "description": "LLM Model Benchmark Tool - Compare model performance on code generation tasks with validation loops",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "llm-bench": "./bin/llm-bench"
+  },
+  "scripts": {
+    "start": "node bin/llm-bench",
+    "bench": "node bin/llm-bench run",
+    "check": "node bin/llm-bench check",
+    "list": "node bin/llm-bench list"
+  },
+  "keywords": [
+    "llm",
+    "benchmark",
+    "openai",
+    "gpt",
+    "testing",
+    "code-generation",
+    "validation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.23.0",
+    "commander": "^12.0.0",
+    "openai": "^4.20.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pli/llm-benchmark.git"
+  }
+}
