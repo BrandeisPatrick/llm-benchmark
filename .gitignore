@@ -3,3 +3,4 @@ node_modules/
 *.log
 results.json
 .DS_Store
+dist-web/
